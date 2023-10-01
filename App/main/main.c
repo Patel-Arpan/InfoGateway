@@ -7,6 +7,7 @@
    CONDITIONS OF ANY KIND, either express or implied.
 */
 #include <string.h>
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
@@ -15,6 +16,9 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
+
+#include "bsp/esp-bsp.h"
+#include "lvgl.h"
 
 #include "lwip/err.h"
 #include "lwip/sys.h"
@@ -69,6 +73,7 @@ static const char *TAG = "wifi station";
 
 static int s_retry_num = 0;
 
+void hello_world_text_lvgl_demo(lv_obj_t *scr);
 
 static void event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
@@ -168,6 +173,14 @@ void app_main(void)
       ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
+
+    bsp_display_start();
+    ESP_LOGI(TAG, "Display Start");
+    bsp_display_lock(0);
+    lv_obj_t *scr = lv_disp_get_scr_act(NULL);
+    hello_world_text_lvgl_demo(scr);
+    bsp_display_unlock();
+    bsp_display_backlight_on();
 
     ESP_LOGI(TAG, "ESP_WIFI_MODE_STA");
     wifi_init_sta();

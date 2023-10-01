@@ -1,0 +1,27 @@
+dependencies:
+  espressif/esp_lvgl_port:
+    component_hash: 11100917e7bc3166b56c6519b61d63b623db9abc8470e5d20439b3b2492477df
+    source:
+      service_url: https://api.components.espressif.com/
+      type: service
+    version: 1.3.0
+  espressif/esp_wrover_kit:
+    component_hash: fee64fa5f994cf3a0fb415e78f8833d47f10f8df4de50aeebc2241c1a65df638
+    source:
+      service_url: https://api.components.espressif.com/
+      type: service
+    version: 1.4.3
+  idf:
+    component_hash: null
+    source:
+      type: idf
+    version: 5.1.1
+  lvgl/lvgl:
+    component_hash: 51022b16bce6ee90f54a8bd21cd6d497d886916899b577b1bebb9125b91e23fc
+    source:
+      service_url: https://api.components.espressif.com/
+      type: service
+    version: 8.3.10
+manifest_hash: b7465d5a52ae3c86ce1b4f19db35f85b8dd4e7f79021149a11df0b8b13f10e8a
+target: esp32
+version: 1.0.0

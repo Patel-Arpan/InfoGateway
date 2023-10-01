@@ -1,0 +1,10 @@
+dependencies:
+  esp_lvgl_port:
+    version: ^1
+  idf:
+    version: '>=4.4'
+description: Board Support Package for ESP-WROVER-KIT
+targets:
+- esp32
+url: https://github.com/espressif/esp-bsp/tree/master/esp_wrover_kit
+version: 1.4.3
