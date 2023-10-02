@@ -9,6 +9,8 @@
 #include "bsp/esp-bsp.h"
 #include <esp_sleep.h>
 #include "esp_log.h"
+#include <driver/gpio.h>
+
 
 // LVGL image declare
 //LV_IMG_DECLARE(esp_logo)
@@ -153,7 +155,7 @@ void hello_world_text_lvgl_demo(lv_obj_t *scr)
 
     //updating values based on timer event of label.
     
-    static uint32_t hello_world_data = 60;
+    static uint32_t hello_world_data = 1;
     lv_timer_create(hello_world_timer, 10000,  &hello_world_data);
 
     // Start the animation
