@@ -24,6 +24,8 @@
 #include "nvs_flash.h"
 #include "esp_netif_sntp.h"
 #include "esp_sntp.h"
+#include <esp_netif.h>
+#include <esp_http_client.h>
 
 #include "bsp/esp-bsp.h"
 #include "lvgl.h"
@@ -32,7 +34,10 @@
 #include "lwip/sys.h"
 #include "lwip/ip_addr.h"
 
-#include "protocol_examples_common.h"
+#include "esp_crt_bundle.h" 
+#include <cJSON.h>
+
+//#include "protocol_examples_common.h"
 
 /* The examples use WiFi configuration that you can set via project configuration menu
 
@@ -96,6 +101,7 @@ static int s_retry_num = 0;
 
 void hello_world_text_lvgl_demo(lv_obj_t *scr);
 static void obtain_time(void);
+void get_weather_data();
 
 #ifdef CONFIG_SNTP_TIME_SYNC_METHOD_CUSTOM
 void sntp_sync_time(struct timeval *tv)
@@ -323,6 +329,61 @@ static void print_servers(void)
     }
 }
 
+bool isWifiConnected() {
+    wifi_ap_record_t ap_info;
+    esp_wifi_sta_get_ap_info(&ap_info);
+    return ap_info.primary != 0;
+}
+ 
+bool isInternetAvailable() {
+    esp_http_client_config_t config = {
+        .url = "http://clients3.google.com/generate_204",
+        .method = HTTP_METHOD_HEAD,
+    };
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    esp_err_t err = esp_http_client_perform(client);
+    esp_http_client_cleanup(client);
+    return err == ESP_OK;
+}
+
+//URL = https://api.openweathermap.org/data/3.0/weather?q=city_name&appid=api_key&units=metric
+
+void get_weather_data() {
+    ESP_LOGI(TAG, "get_weather_data() 1\n");
+
+    esp_http_client_config_t config = {
+        .url = "http://api.openweathermap.org/data/2.5/weather?q=Pune&units=metric&appid=81735552c309dfe587cd3a64fe13b016",
+        .transport_type = HTTP_TRANSPORT_OVER_SSL,
+        .crt_bundle_attach = esp_crt_bundle_attach,
+
+    };
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    ESP_LOGI(TAG, "get_weather_data() 2\n");
+    esp_err_t err = esp_http_client_perform(client);
+    ESP_LOGI(TAG, "get_weather_data() 3\n");
+    if (err == ESP_OK) {
+        int content_length = esp_http_client_get_content_length(client);
+        ESP_LOGI(TAG, "get_weather_data() 4 len %d\n", content_length);
+        char *buffer = malloc(content_length + 1);
+        int read_len = esp_http_client_read(client, buffer, content_length);
+        buffer[read_len] = '\0';
+        ESP_LOGI(TAG, "get_weather_data() 5 len %d\n", read_len);
+        cJSON *root = cJSON_Parse(buffer);
+        cJSON *weather = cJSON_GetObjectItem(root, "weather");
+        cJSON *description = cJSON_GetObjectItem(weather, "description");
+        cJSON *main = cJSON_GetObjectItem(root, "main");
+        cJSON *temp = cJSON_GetObjectItem(main, "temp");
+        ESP_LOGI(TAG, "get_weather_data() 6\n");
+        ESP_LOGI(TAG, "Current weather: %s\n", description->valuestring);
+        ESP_LOGI(TAG, "get_weather_data() 7\n");
+        ESP_LOGI(TAG,"Temperature: %.1f°C\n", temp->valuedouble);
+        ESP_LOGI(TAG, "get_weather_data() 8\n");
+        cJSON_Delete(root);
+        free(buffer);
+    }
+    esp_http_client_cleanup(client);
+}
+
 static void obtain_time(void)
 {
     //ESP_ERROR_CHECK(nvs_flash_init()); - already init earlier
@@ -411,4 +472,11 @@ static void obtain_time(void)
 
     //ESP_ERROR_CHECK(example_disconnect()); //don't want to disconnect here, may be later
     //esp_netif_sntp_deinit(); //don't want to deinit here, may be later
+
+    int cnt = 5;
+    while(cnt--) {
+        if (isWifiConnected() && isInternetAvailable()) {
+            get_weather_data();
+        }
+    }
 }
