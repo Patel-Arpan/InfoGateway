@@ -94,8 +94,6 @@ static const char *TAG = "AppMain";
 
 static int s_retry_num = 0;
 
-static uint8_t isWifiConnected = false;
-
 void hello_world_text_lvgl_demo(lv_obj_t *scr);
 static void obtain_time(void);
 
@@ -119,8 +117,7 @@ static void event_handler(void* arg, esp_event_base_t event_base,
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        if (s_retry_num < EXAMPLE_ESP_MAXIMUM_RETRY) {
-            isWifiConnected = false;
+        if (s_retry_num < EXAMPLE_ESP_MAXIMUM_RETRY) {            
             esp_wifi_connect();
             s_retry_num++;
             ESP_LOGI(TAG, "retry to connect to the AP");
@@ -131,15 +128,13 @@ static void event_handler(void* arg, esp_event_base_t event_base,
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
         ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
-        s_retry_num = 0;
-        isWifiConnected = true;
+        s_retry_num = 0;        
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
     }
 }
 
 void wifi_init_sta(void)
 {
-    isWifiConnected = false;
     s_wifi_event_group = xEventGroupCreate();
 
     ESP_ERROR_CHECK(esp_netif_init());
@@ -195,15 +190,12 @@ void wifi_init_sta(void)
      * happened. */
     if (bits & WIFI_CONNECTED_BIT) {
         ESP_LOGI(TAG, "connected to ap SSID:%s password:%s",
-                 EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);
-        isWifiConnected = true;
+                 EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);        
     } else if (bits & WIFI_FAIL_BIT) {
         ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s",
                  EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);
-        isWifiConnected = false;
     } else {
         ESP_LOGE(TAG, "UNEXPECTED EVENT");
-        isWifiConnected = false;
     }
 }
 
@@ -240,13 +232,6 @@ void app_main(void)
 
     ESP_LOGI(TAG, "ESP_WIFI_MODE_STA");
     wifi_init_sta();
-
-    int no_of_tries = 20;
-    while(!isWifiConnected && no_of_tries--)
-    {
-        ESP_LOGI(TAG, "Wifi is not yet connected...");
-        vTaskDelay(pdMS_TO_TICKS(1000)); //wait for 1000ms
-    }
 
 //1. Time SNTP
     time(&now);
