@@ -241,7 +241,8 @@ void app_main(void)
     ESP_LOGI(TAG, "ESP_WIFI_MODE_STA");
     wifi_init_sta();
 
-    while(!isWifiConnected)
+    int no_of_tries = 20;
+    while(!isWifiConnected && no_of_tries--)
     {
         ESP_LOGI(TAG, "Wifi is not yet connected...");
         vTaskDelay(pdMS_TO_TICKS(1000)); //wait for 1000ms
