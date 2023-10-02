@@ -5,6 +5,8 @@
  */
 #include "lvgl.h"
 
+#if 0 //Not Used
+
 #ifndef LV_ATTRIBUTE_MEM_ALIGN
 #define LV_ATTRIBUTE_MEM_ALIGN
 #endif
@@ -196,3 +198,5 @@ const lv_img_dsc_t esp_text = {
     .header.cf = LV_IMG_CF_TRUE_COLOR_ALPHA,
     .data = esp_text_map,
 };
+
+#endif 0 //Not Used

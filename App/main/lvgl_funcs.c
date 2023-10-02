@@ -7,16 +7,12 @@
 #include <math.h>
 #include "lvgl.h"
 #include "bsp/esp-bsp.h"
+#include <esp_sleep.h>
 #include "esp_log.h"
 
-
-#ifndef PI
-#define PI  (3.14159f)
-#endif
-
 // LVGL image declare
-LV_IMG_DECLARE(esp_logo)
-LV_IMG_DECLARE(esp_text)
+//LV_IMG_DECLARE(esp_logo)
+//LV_IMG_DECLARE(esp_text)
 
 #if 0
 typedef struct {
@@ -99,8 +95,19 @@ void hello_world_timer(lv_timer_t *timer)
     lv_label_set_text(hello_world_label, new_string);
   }
 
-  if (*l_data < 1)
+  if (*l_data < 1) {
     lv_timer_del(timer);
+
+    if (hello_world_label!= NULL) {
+        lv_obj_del(hello_world_label);
+    }
+
+    //LVGL at present does not support, turn off display, remove display, stop display.
+    //ToDo: Need to implement above API for better powering off.
+    //put the device into deep sleep and turn off the display.
+    bsp_display_backlight_off();
+    esp_deep_sleep_start(); //put the device in deep sleep (lowest power mode)
+  }
 
 }
 
