@@ -155,7 +155,7 @@ void hello_world_text_lvgl_demo(lv_obj_t *scr)
 
     //updating values based on timer event of label.
     
-    static uint32_t hello_world_data = 1;
+    static uint32_t hello_world_data = 3;
     lv_timer_create(hello_world_timer, 10000,  &hello_world_data);
 
     // Start the animation
