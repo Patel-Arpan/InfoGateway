@@ -1,114 +1,12 @@
-/* WiFi station Example
-
-   This example code is in the Public Domain (or CC0 licensed, at your option.)
-
-   Unless required by applicable law or agreed to in writing, this
-   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-   CONDITIONS OF ANY KIND, either express or implied.
+/* 
+    InfoGateway Application
+    Author: Arpan Patel
+    Date: Oct 2, 2023
 */
-#include <string.h>
-#include <time.h>
-#include <sys/time.h>
-
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/event_groups.h"
-#include <freertos/timers.h>
-#include "freertos/semphr.h"
-
-#include "esp_system.h"
-#include "esp_wifi.h"
-#include "esp_event.h"
-#include "esp_attr.h"
-#include "esp_sleep.h"
-#include "esp_log.h"
-#include "nvs_flash.h"
-#include "esp_netif_sntp.h"
-#include "esp_sntp.h"
-#include <esp_netif.h>
-#include <esp_http_client.h>
-
-#include "bsp/esp-bsp.h"
-#include "lvgl.h"
-
-#include "lwip/err.h"
-#include "lwip/sys.h"
-#include "lwip/ip_addr.h"
-
-#include "esp_crt_bundle.h" 
-#include <cJSON.h>
-
-//#include "protocol_examples_common.h"
-
-/* The examples use WiFi configuration that you can set via project configuration menu
-
-   If you'd rather not, just change the below entries to strings with
-   the config you want - ie #define EXAMPLE_WIFI_SSID "mywifissid"
-*/
-#define EXAMPLE_ESP_WIFI_SSID      CONFIG_ESP_WIFI_SSID
-#define EXAMPLE_ESP_WIFI_PASS      CONFIG_ESP_WIFI_PASSWORD
-#define EXAMPLE_ESP_MAXIMUM_RETRY  CONFIG_ESP_MAXIMUM_RETRY
-
-#if CONFIG_ESP_WPA3_SAE_PWE_HUNT_AND_PECK
-#define ESP_WIFI_SAE_MODE WPA3_SAE_PWE_HUNT_AND_PECK
-#define EXAMPLE_H2E_IDENTIFIER ""
-#elif CONFIG_ESP_WPA3_SAE_PWE_HASH_TO_ELEMENT
-#define ESP_WIFI_SAE_MODE WPA3_SAE_PWE_HASH_TO_ELEMENT
-#define EXAMPLE_H2E_IDENTIFIER CONFIG_ESP_WIFI_PW_ID
-#elif CONFIG_ESP_WPA3_SAE_PWE_BOTH
-#define ESP_WIFI_SAE_MODE WPA3_SAE_PWE_BOTH
-#define EXAMPLE_H2E_IDENTIFIER CONFIG_ESP_WIFI_PW_ID
-#endif
-#if CONFIG_ESP_WIFI_AUTH_OPEN
-#define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_OPEN
-#elif CONFIG_ESP_WIFI_AUTH_WEP
-#define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WEP
-#elif CONFIG_ESP_WIFI_AUTH_WPA_PSK
-#define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WPA_PSK
-#elif CONFIG_ESP_WIFI_AUTH_WPA2_PSK
-#define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WPA2_PSK
-#elif CONFIG_ESP_WIFI_AUTH_WPA_WPA2_PSK
-#define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WPA_WPA2_PSK
-#elif CONFIG_ESP_WIFI_AUTH_WPA3_PSK
-#define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WPA3_PSK
-#elif CONFIG_ESP_WIFI_AUTH_WPA2_WPA3_PSK
-#define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WPA2_WPA3_PSK
-#elif CONFIG_ESP_WIFI_AUTH_WAPI_PSK
-#define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WAPI_PSK
-#endif
-
-/* FreeRTOS event group to signal when we are connected*/
-static EventGroupHandle_t s_wifi_event_group;
-
-/* The event group allows multiple bits for each event, but we only care about two events:
- * - we are connected to the AP with an IP
- * - we failed to connect after the maximum amount of retries */
-#define WIFI_CONNECTED_BIT BIT0
-#define WIFI_FAIL_BIT      BIT1
-
-#ifndef INET6_ADDRSTRLEN
-#define INET6_ADDRSTRLEN 48
-#endif
-
-/* Variable holding number of times ESP32 restarted since first boot.
- * It is placed into RTC memory using RTC_DATA_ATTR and
- * maintains its value when ESP32 wakes from deep sleep.
- */
-RTC_DATA_ATTR static int boot_count = 0;
+#include "main.h"
 
 static const char *TAG = "AppMain";
 
-static int s_retry_num = 0;
-
-SemaphoreHandle_t g_json_mutex;
-
-void hello_world_text_lvgl_demo(lv_obj_t *scr);
-static void obtain_time(void);
-bool isInternetAvailable(void);
-bool isWifiConnected(void);
-void get_temp(char *json_string);
-esp_err_t get_weather_data_client_handler(esp_http_client_event_t *event);
-void get_weather_data(void);
 
 #ifdef CONFIG_SNTP_TIME_SYNC_METHOD_CUSTOM
 void sntp_sync_time(struct timeval *tv)
@@ -124,7 +22,7 @@ void time_sync_notification_cb(struct timeval *tv)
     ESP_LOGI(TAG, "Notification of a time synchronization event");
 }
 
-static void event_handler(void* arg, esp_event_base_t event_base,
+static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
 {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
@@ -162,12 +60,12 @@ void wifi_init_sta(void)
     esp_event_handler_instance_t instance_got_ip;
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
                                                         ESP_EVENT_ANY_ID,
-                                                        &event_handler,
+                                                        &wifi_event_handler,
                                                         NULL,
                                                         &instance_any_id));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
                                                         IP_EVENT_STA_GOT_IP,
-                                                        &event_handler,
+                                                        &wifi_event_handler,
                                                         NULL,
                                                         &instance_got_ip));
 
@@ -192,7 +90,7 @@ void wifi_init_sta(void)
     ESP_LOGI(TAG, "wifi_init_sta finished.");
 
     /* Waiting until either the connection is established (WIFI_CONNECTED_BIT) or connection failed for the maximum
-     * number of re-tries (WIFI_FAIL_BIT). The bits are set by event_handler() (see above) */
+     * number of re-tries (WIFI_FAIL_BIT). The bits are set by wifi_event_handler() (see above) */
     EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
             WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
             pdFALSE,
@@ -214,7 +112,8 @@ void wifi_init_sta(void)
 
 //timer to print real world time every second in log, for test purpose.
 //later to be shown on the display.
-void real_world_time_Timer(TimerHandle_t xTimer) {
+void real_world_time_Timer(TimerHandle_t xTimer)
+{
     time_t now;
     struct tm timeinfo;
     char strftime_buf[64];
@@ -233,11 +132,6 @@ void app_main(void)
 
     time_t now;
     struct tm timeinfo;
-
-    g_json_mutex = xSemaphoreCreateMutex();
-    if (g_json_mutex == NULL) {
-        ESP_LOGE(TAG, "g_json_mutex not available.");
-    }
 
 //1. Wifi Enable
     //Initialize NVS
@@ -332,7 +226,7 @@ void app_main(void)
     ESP_LOGI(TAG, "App Ended.");
 }
 
-static void print_servers(void)
+void print_servers(void)
 {
     ESP_LOGI(TAG, "List of configured NTP servers:");
 
@@ -369,8 +263,6 @@ bool isInternetAvailable()
 }
 
 //URL = https://api.openweathermap.org/data/3.0/weather?q=city_name&appid=api_key&units=metric
-char response_data[1024];
-size_t response_len = 0;
 
 void get_temp(char *json_string)
 {
@@ -411,14 +303,14 @@ esp_err_t get_weather_data_client_handler(esp_http_client_event_t *event)
     switch (event->event_id) {
         case HTTP_EVENT_ON_DATA:
             // Resize the buffer to fit the new chunk of data
-            memcpy(response_data + response_len, event->data, event->data_len);
-            response_len += event->data_len;
+            memcpy(response_data_weather_api + response_len_weather_api, event->data, event->data_len);
+            response_len_weather_api += event->data_len;
             break;
         case HTTP_EVENT_ON_FINISH:            
-            //ESP_LOGI("OpenWeatherAPI", "Received len: %u", response_len);
-            get_temp(response_data);
-            memset(response_data, 0, 1024); //clear the buffer before reuse.
-            response_len = 0; //reset the length to avoid overflow
+            //ESP_LOGI("OpenWeatherAPI", "Received len: %u", response_len_weather_api);
+            get_temp(response_data_weather_api);
+            memset(response_data_weather_api, 0, 1024); //clear the buffer before reuse.
+            response_len_weather_api = 0; //reset the length to avoid overflow
             break;
         default:
             break;
@@ -429,14 +321,12 @@ esp_err_t get_weather_data_client_handler(esp_http_client_event_t *event)
 void get_weather_data() {    
 
     //clear the buffer before use.
-    memset(response_data, 0, 1024); //0 all bytes.
-    response_len = 0;
+    memset(response_data_weather_api, 0, 1024); //0 all bytes.
+    response_len_weather_api = 0;
 
     esp_http_client_config_t config = {
         .url = "http://api.openweathermap.org/data/2.5/weather?q=Pune&units=metric&appid=81735552c309dfe587cd3a64fe13b016",
         .method = HTTP_METHOD_GET,
-        //.transport_type = HTTP_TRANSPORT_OVER_SSL,
-        //.crt_bundle_attach = esp_crt_bundle_attach,
         .event_handler = get_weather_data_client_handler,
     };
 
@@ -453,12 +343,8 @@ void get_weather_data() {
     esp_http_client_cleanup(client);
 }
 
-static void obtain_time(void)
-{
-    //ESP_ERROR_CHECK(nvs_flash_init()); - already init earlier
-    //ESP_ERROR_CHECK(esp_netif_init()); - already init earlier
-    //ESP_ERROR_CHECK(esp_event_loop_create_default()); - already init earlier
-
+void obtain_time(void)
+{    
 #if LWIP_DHCP_GET_NTP_SRV
     /**
      * NTP server address could be acquired via DHCP,
@@ -485,12 +371,6 @@ static void obtain_time(void)
     esp_netif_sntp_init(&config);
 
 #endif /* LWIP_DHCP_GET_NTP_SRV */
-
-    /* This helper function configures Wi-Fi or Ethernet, as selected in menuconfig.
-     * Read "Establishing Wi-Fi or Ethernet Connection" section in
-     * examples/protocols/README.md for more information about this function.
-     */
-    //ESP_ERROR_CHECK(example_connect());
 
 #if LWIP_DHCP_GET_NTP_SRV
     ESP_LOGI(TAG, "Starting SNTP");
@@ -539,6 +419,4 @@ static void obtain_time(void)
     time(&now);
     localtime_r(&now, &timeinfo);
 
-    //ESP_ERROR_CHECK(example_disconnect()); //don't want to disconnect here, may be later
-    //esp_netif_sntp_deinit(); //don't want to deinit here, may be later    
 }
