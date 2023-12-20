@@ -199,4 +199,4 @@ const lv_img_dsc_t esp_text = {
     .data = esp_text_map,
 };
 
-#endif 0 //Not Used
+#endif //Not Used

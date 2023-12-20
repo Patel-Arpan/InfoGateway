@@ -29,6 +29,8 @@
 #include "lwip/sys.h"
 #include "lwip/ip_addr.h"
 
+#include "driver/rtc_io.h"
+
 #include <cJSON.h>
 
 
@@ -37,9 +39,9 @@
    If you'd rather not, just change the below entries to strings with
    the config you want - ie #define EXAMPLE_WIFI_SSID "mywifissid"
 */
-#define EXAMPLE_ESP_WIFI_SSID      CONFIG_ESP_WIFI_SSID
-#define EXAMPLE_ESP_WIFI_PASS      CONFIG_ESP_WIFI_PASSWORD
-#define EXAMPLE_ESP_MAXIMUM_RETRY  CONFIG_ESP_MAXIMUM_RETRY
+#define AP_WIFI_SSID      CONFIG_ESP_WIFI_SSID
+#define AP_WIFI_PASS      CONFIG_ESP_WIFI_PASSWORD
+#define AP_MAXIMUM_RETRY  CONFIG_ESP_MAXIMUM_RETRY
 
 #if CONFIG_ESP_WPA3_SAE_PWE_HUNT_AND_PECK
 #define ESP_WIFI_SAE_MODE WPA3_SAE_PWE_HUNT_AND_PECK
@@ -89,10 +91,13 @@ static EventGroupHandle_t s_wifi_event_group;
 RTC_DATA_ATTR static int boot_count = 0;
 
 static int s_retry_num = 0;
-char response_data_weather_api[1024];
-size_t response_len_weather_api = 0;
+static char response_data_weather_api[1024];
+static size_t response_len_weather_api = 0;
+
+static struct timeval sleep_enter_time;
 
 void hello_world_text_lvgl_demo(lv_obj_t *scr);
+void show_current_time_lvgl();
 
 #ifdef CONFIG_SNTP_TIME_SYNC_METHOD_CUSTOM
 void sntp_sync_time(struct timeval *tv)

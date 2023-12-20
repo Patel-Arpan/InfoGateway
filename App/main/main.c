@@ -22,13 +22,17 @@ void time_sync_notification_cb(struct timeval *tv)
     ESP_LOGI(TAG, "Notification of a time synchronization event");
 }
 
+/* TODO: If Wifi Fails, retry after every 5 mins or on button event.
+   Case1: Wifi doesn't connect at start
+   Case2: Wifi disconnects in between
+*/
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
 {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        if (s_retry_num < EXAMPLE_ESP_MAXIMUM_RETRY) {            
+        if (s_retry_num < AP_MAXIMUM_RETRY) {            
             esp_wifi_connect();
             s_retry_num++;
             ESP_LOGI(TAG, "retry to connect to the AP");
@@ -71,8 +75,8 @@ void wifi_init_sta(void)
 
     wifi_config_t wifi_config = {
         .sta = {
-            .ssid = EXAMPLE_ESP_WIFI_SSID,
-            .password = EXAMPLE_ESP_WIFI_PASS,
+            .ssid = AP_WIFI_SSID,
+            .password = AP_WIFI_PASS,
             /* Authmode threshold resets to WPA2 as default if password matches WPA2 standards (pasword len => 8).
              * If you want to connect the device to deprecated WEP/WPA networks, Please set the threshold value
              * to WIFI_AUTH_WEP/WIFI_AUTH_WPA_PSK and set the password with length and format matching to
@@ -101,10 +105,10 @@ void wifi_init_sta(void)
      * happened. */
     if (bits & WIFI_CONNECTED_BIT) {
         ESP_LOGI(TAG, "connected to ap SSID:%s password:%s",
-                 EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);        
+                 AP_WIFI_SSID, AP_WIFI_PASS);        
     } else if (bits & WIFI_FAIL_BIT) {
         ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s",
-                 EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);
+                 AP_WIFI_SSID, AP_WIFI_PASS);
     } else {
         ESP_LOGE(TAG, "UNEXPECTED EVENT");
     }
@@ -121,7 +125,53 @@ void real_world_time_Timer(TimerHandle_t xTimer)
     time(&now);
     localtime_r(&now, &timeinfo);
     strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-    ESP_LOGI(TAG, "The current date/time in India is: %s", strftime_buf);   
+    ESP_LOGI(TAG, "The current date/time in India is: %s", strftime_buf);
+}
+
+static void deep_sleep_task(void *args)
+{
+    struct timeval now;
+    gettimeofday(&now, NULL);
+    int sleep_time_ms = (now.tv_sec - sleep_enter_time.tv_sec) * 1000 + (now.tv_usec - sleep_enter_time.tv_usec) / 1000;
+
+    switch (esp_sleep_get_wakeup_cause()) {
+        case ESP_SLEEP_WAKEUP_TIMER: {
+            printf("Wake up from timer. Time spent in deep sleep: %dms\n", sleep_time_ms);
+            break;
+        }
+        case ESP_SLEEP_WAKEUP_UNDEFINED:
+        default:
+            printf("Not a deep sleep reset\n");
+    }
+
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+
+#if CONFIG_IDF_TARGET_ESP32
+    // Isolate GPIO12 pin from external circuits. This is needed for modules
+    // which have an external pull-up resistor on GPIO12 (such as ESP32-WROVER)
+    // to minimize current consumption.
+    rtc_gpio_isolate(GPIO_NUM_12);
+#endif
+    
+    //tried to turn off the display but not successful.
+    //backlight before deep sleep.
+    //bsp_display_lock(500);
+    //bsp_display_backlight_off();
+
+    printf("Entering deep sleep\n");
+
+    // get deep sleep enter time
+    gettimeofday(&sleep_enter_time, NULL);
+
+    // enter deep sleep
+    esp_deep_sleep_start();
+}
+
+static void example_deep_sleep_register_rtc_timer_wakeup(void)
+{
+    const int wakeup_time_sec = 60;
+    printf("Enabling timer wakeup, %ds\n", wakeup_time_sec);
+    ESP_ERROR_CHECK(esp_sleep_enable_timer_wakeup(wakeup_time_sec * 1000000));
 }
 
 void app_main(void)
@@ -129,6 +179,9 @@ void app_main(void)
     ++boot_count;
     ESP_LOGI(TAG, "App Started.");
     ESP_LOGI(TAG, "Boot Count. [%d]", boot_count);
+    
+    /* Enable wakeup from deep sleep by rtc timer */
+    example_deep_sleep_register_rtc_timer_wakeup();
 
     time_t now;
     struct tm timeinfo;
@@ -198,30 +251,20 @@ void app_main(void)
         }
     }
 
-    TimerHandle_t real_world_timer = xTimerCreate("real_world_time", pdMS_TO_TICKS(10000), pdTRUE, (void *)0, real_world_time_Timer);
-    xTimerStart(real_world_timer, 0);
-
-    //entering deep sleep is not required, was being used in sntp example
-    //const int deep_sleep_sec = 10;
-    //ESP_LOGI(TAG, "Entering deep sleep for %d seconds", deep_sleep_sec);
-    //esp_deep_sleep(1000000LL * deep_sleep_sec);
-
-//3. Display Enable
+    //3. Display Enable
     bsp_display_start();
     ESP_LOGI(TAG, "Display Start");
-    bsp_display_lock(0);
-    lv_obj_t *scr = lv_disp_get_scr_act(NULL);
-    hello_world_text_lvgl_demo(scr);
+    bsp_display_lock(0);    
+    show_current_time_lvgl();
     bsp_display_unlock();
     bsp_display_backlight_on();
-
-    int cnt = 5;
-    while(cnt--) {
-        if (isWifiConnected() && isInternetAvailable()) {
-            get_weather_data();
-        }
-        vTaskDelay(10000 / portTICK_PERIOD_MS);
+    
+    if (isWifiConnected() && isInternetAvailable()) {
+        get_weather_data();
     }
+
+    vTaskDelay(1250 / portTICK_PERIOD_MS);
+    xTaskCreate(deep_sleep_task, "deep_sleep_task", 4096, NULL, 6, NULL);
 
     ESP_LOGI(TAG, "App Ended.");
 }
