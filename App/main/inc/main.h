@@ -94,7 +94,9 @@ static int s_retry_num = 0;
 static char response_data_weather_api[1024];
 static size_t response_len_weather_api = 0;
 
+#if 0 //DEEP_SLEEP_TASK
 static struct timeval sleep_enter_time;
+#endif
 
 void hello_world_text_lvgl_demo(lv_obj_t *scr);
 void show_current_time_lvgl();

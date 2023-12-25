@@ -91,6 +91,6 @@ void show_current_time_lvgl()
 
     //updating values based on timer event of label.
     
-    static uint32_t cnt = 30 * 60;
+    static uint32_t cnt = 5 * 60;
     lv_timer_create(current_time_timer, 1000,  &cnt);    
 }

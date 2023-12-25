@@ -6,6 +6,8 @@
 #include "main.h"
 
 static const char *TAG = "AppMain";
+#define MOTOR_PIN               (GPIO_NUM_26)
+#define STAY_AWAKE_TIME_SEC     (5 * 60 * 1000)  //12 * 6 * 60 = 720000 = 12 Mins
 
 
 #ifdef CONFIG_SNTP_TIME_SYNC_METHOD_CUSTOM
@@ -104,11 +106,10 @@ void wifi_init_sta(void)
     /* xEventGroupWaitBits() returns the bits before the call returned, hence we can test which event actually
      * happened. */
     if (bits & WIFI_CONNECTED_BIT) {
-        ESP_LOGI(TAG, "connected to ap SSID:%s password:%s",
-                 AP_WIFI_SSID, AP_WIFI_PASS);        
+        ESP_LOGI(TAG, "connected to AP SSID:%s", AP_WIFI_SSID);  
+        //ESP_LOGI(TAG, "connected to AP SSID:%s password:%s", AP_WIFI_SSID, AP_WIFI_PASS);        
     } else if (bits & WIFI_FAIL_BIT) {
-        ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s",
-                 AP_WIFI_SSID, AP_WIFI_PASS);
+        ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s", AP_WIFI_SSID, AP_WIFI_PASS);
     } else {
         ESP_LOGE(TAG, "UNEXPECTED EVENT");
     }
@@ -128,6 +129,7 @@ void real_world_time_Timer(TimerHandle_t xTimer)
     ESP_LOGI(TAG, "The current date/time in India is: %s", strftime_buf);
 }
 
+#if 0 //DEEP_SLEEP_TASK
 static void deep_sleep_task(void *args)
 {
     struct timeval now;
@@ -167,21 +169,29 @@ static void deep_sleep_task(void *args)
     esp_deep_sleep_start();
 }
 
-static void example_deep_sleep_register_rtc_timer_wakeup(void)
+static void deep_sleep_register_rtc_timer_wakeup(void)
 {
     const int wakeup_time_sec = 60;
     printf("Enabling timer wakeup, %ds\n", wakeup_time_sec);
     ESP_ERROR_CHECK(esp_sleep_enable_timer_wakeup(wakeup_time_sec * 1000000));
 }
+#endif //DEEP_SLEEP_TASK
 
 void app_main(void)
 {
     ++boot_count;
     ESP_LOGI(TAG, "App Started.");
     ESP_LOGI(TAG, "Boot Count. [%d]", boot_count);
-    
+
+    // Set your desired wake-up time (24-hour format)
+    const int wakeHour = 8;    // 8:00 AM
+    const int wakeMinute = 0;  // 0 minutes
+    const int wakeSecond = 0;  // 0 seconds
+
+#if 0 //DEEP_SLEEP_TASK    
     /* Enable wakeup from deep sleep by rtc timer */
-    example_deep_sleep_register_rtc_timer_wakeup();
+    deep_sleep_register_rtc_timer_wakeup();
+#endif
 
     time_t now;
     struct tm timeinfo;
@@ -209,6 +219,7 @@ void app_main(void)
         // update 'now' variable with current time
         time(&now);
     }
+
 #ifdef CONFIG_SNTP_TIME_SYNC_METHOD_SMOOTH
     else {
         // add 500 ms error to the current system time.
@@ -251,6 +262,32 @@ void app_main(void)
         }
     }
 
+    // Get the current time
+    struct tm new_timeinfo;
+    time(&now);
+    localtime_r(&now, &new_timeinfo);
+
+    // Calculate the next wake-up time
+    struct tm nextWakeTime = new_timeinfo;
+    nextWakeTime.tm_hour = wakeHour; 
+    nextWakeTime.tm_min = wakeMinute;
+    nextWakeTime.tm_sec = wakeSecond;
+
+    // If the next wake-up time is in the past, add 24 hours
+    time_t currentTime = mktime(&new_timeinfo);
+    time_t nextWakeTimestamp = mktime(&nextWakeTime);
+    if (nextWakeTimestamp <= currentTime) {
+        nextWakeTimestamp += 24 * 3600; // Add 24 hours
+    }
+
+    // Calculate sleep duration until the next wake-up time
+    uint64_t sleepDuration = (nextWakeTimestamp - currentTime) * 1000000;
+
+    // Configure ESP32 to wake up at the specified time
+    esp_sleep_enable_timer_wakeup(sleepDuration);
+    strftime(strftime_buf, sizeof(strftime_buf), "%c", &nextWakeTime);
+    ESP_LOGI(TAG, "The Wake Up date/time in India is: %s", strftime_buf);
+
     //3. Display Enable
     bsp_display_start();
     ESP_LOGI(TAG, "Display Start");
@@ -263,9 +300,34 @@ void app_main(void)
         get_weather_data();
     }
 
+    gpio_config_t io_conf;
+    io_conf.intr_type = GPIO_INTR_DISABLE; // Disable interrupt
+    io_conf.mode = GPIO_MODE_OUTPUT; // Set as output mode
+    io_conf.pin_bit_mask = (1ULL << MOTOR_PIN); // Bitmask for the pin
+    io_conf.pull_down_en = 0; // Disable pull-down
+    io_conf.pull_up_en = 0; // Disable pull-up
+    gpio_config(&io_conf); // Configure the GPIO pin
+  
+    ESP_LOGI(TAG, "Testing DC Motor...\n");
+
+    // Turn on the motor //relay is Negative logic, LOW is ON, HIGH is OFF
+    gpio_set_level(MOTOR_PIN, 0);
+
+    // Stay awake for __ minutes (____ seconds)
+    vTaskDelay(STAY_AWAKE_TIME_SEC / portTICK_PERIOD_MS);
+
+    // Turn off the motor //relay is Negative logic, LOW is ON, HIGH is OFF
+    gpio_set_level(MOTOR_PIN, 1);
+
+    // Put the ESP32 into deep sleep mode
+    ESP_LOGI(TAG, "Enter Deep Sleep");
+    esp_deep_sleep_start();
+
+#if 0 //DEEP_SLEEP_TASK
     vTaskDelay(1250 / portTICK_PERIOD_MS);
     xTaskCreate(deep_sleep_task, "deep_sleep_task", 4096, NULL, 6, NULL);
-
+#endif
+    
     ESP_LOGI(TAG, "App Ended.");
 }
 
